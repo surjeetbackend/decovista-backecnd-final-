@@ -62,7 +62,6 @@ const sendWhatsAppButtons = async (toPhone) => {
       },
     },
   };
-
   try {
     const res = await axios.post(
       `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_ID}/messages`,
@@ -80,6 +79,43 @@ const sendWhatsAppButtons = async (toPhone) => {
     throw err;
   }
 };
+const sendVillaTypeButtons = async (toPhone) => {
+  const payload = {
+    messaging_product: "whatsapp",
+    to: toPhone,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: {
+        text: "🏡 What type of property would you prefer?",
+      },
+      action: {
+        buttons: [
+          { type: "reply", reply: { id: "villa_only", title: "Villa" } },
+          { type: "reply", reply: { id: "independent_only", title: "Independent House" } },
+        ],
+      },
+    },
+  };
+
+  try {
+    const res = await axios.post(
+      `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_ID}/messages`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    console.log("✅ Villa Type Buttons sent:", res.data);
+  } catch (err) {
+    console.error("❌ Villa Button error:", err.response?.data || err.message);
+    throw err;
+  }
+};
+
 
 // ✅ Website Form Route
 app.post("/submit-form", async (req, res) => {
@@ -133,53 +169,75 @@ app.post("/whatsapp", async (req, res) => {
   const session = sessions[from];
 
   try {
-    switch (session.step) {
-      case 0:
-        await sendWhatsAppButtons(from.replace("whatsapp:", ""));
-        session.step = 1;
-        return res.end(twiml.toString());
+ switch (session.step) {
+  case 0:
+    await sendWhatsAppButtons(from.replace("whatsapp:", ""));
+    session.step = 1;
+    return res.end(twiml.toString());
 
-      case 1:
-        session.data.service = incomingMsg;
-        msg.body("🔤 Great! What's your full name?");
-        session.step = 2;
-        break;
-
-      case 2:
-        session.data.name = incomingMsg;
-        msg.body("📞 Please provide your 10-digit phone number.");
-        session.step = 3;
-        break;
-
-      case 3:
-        if (!/^\d{10}$/.test(incomingMsg)) {
-          msg.body("❌ Please enter a valid 10-digit phone number.");
-          break;
-        }
-        session.data.phone = incomingMsg;
-        msg.body("📧 Now, please enter your email address.");
-        session.step = 4;
-        break;
-
-      case 4:
-        if (!incomingMsg.includes("@")) {
-          msg.body("❌ Please enter a valid email address.");
-          break;
-        }
-        session.data.email = incomingMsg;
-
-        await sendToUser(session.data.name, session.data.phone);
-        await sendToOwner(session.data);
-
-        msg.body("✅ Thanks! Your info has been saved. We'll get in touch soon.");
-        delete sessions[from];
-        break;
-
-      default:
-        msg.body("🤖 Please type *Hi* to start again.");
-        delete sessions[from];
-        break;
+  case 1:
+    if (
+      incomingMsg.toLowerCase().includes("villa") ||
+      incomingMsg.toLowerCase().includes("independent")
+    ) {
+      await sendVillaTypeButtons(from.replace("whatsapp:", ""));
+      session.step = 1.5;
+      return res.end(twiml.toString());
+    } else {
+      session.data.service = incomingMsg;
+      msg.body("🔤 Great! What's your full name?");
+      session.step = 2;
     }
+    break;
+
+  case 1.5:
+    if (incomingMsg.toLowerCase().includes("villa")) {
+      session.data.service = "Villa";
+    } else if (incomingMsg.toLowerCase().includes("independent")) {
+      session.data.service = "Independent House";
+    } else {
+      msg.body("❌ Please choose from the buttons above.");
+      return res.end(twiml.toString());
+    }
+    msg.body("🔤 Great! What's your full name?");
+    session.step = 2;
+    break;
+
+  case 2:
+    session.data.name = incomingMsg;
+    msg.body("📞 Please provide your 10-digit phone number.");
+    session.step = 3;
+    break;
+
+  case 3:
+    if (!/^\d{10}$/.test(incomingMsg)) {
+      msg.body("❌ Please enter a valid 10-digit phone number.");
+      break;
+    }
+    session.data.phone = incomingMsg;
+    msg.body("📧 Now, please enter your email address.");
+    session.step = 4;
+    break;
+
+  case 4:
+    if (!incomingMsg.includes("@")) {
+      msg.body("❌ Please enter a valid email address.");
+      break;
+    }
+    session.data.email = incomingMsg;
+
+    await sendToUser(session.data.name, session.data.phone);
+    await sendToOwner(session.data);
+
+    msg.body("✅ Thanks! Your info has been saved. We'll get in touch soon.");
+    delete sessions[from];
+    break;
+
+  default:
+    msg.body("🤖 Please type *Hi* to start again.");
+    delete sessions[from];
+    break;
+}
   } catch (err) {
     console.error("❌ WhatsApp Bot Error:", err.message);
     msg.body(
