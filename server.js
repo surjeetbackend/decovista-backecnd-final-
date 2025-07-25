@@ -57,6 +57,7 @@ const sendWhatsAppButtons = async (toPhone) => {
           { type: "reply", reply: { id: "2bhk", title: "2BHK" } },
           { type: "reply", reply: { id: "3bhk", title: "3BHK" } },
           { type: "reply", reply: { id: "villa", title: "Villa" } },
+           {type:"reply", reply:{id:"Independent house", title:"Independent house"}},
         ],
       },
     },
